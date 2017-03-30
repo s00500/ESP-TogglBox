@@ -69,7 +69,7 @@ void sendPage(void)
 
 
 String pageContent = "<HTML><HEAD> <title>Toggl Control</title></HEAD>\n";
-pageContent += "<BODY bgcolor=\"#CC00FF\" text=\"#000000\">";
+pageContent += "<BODY bgcolor=\"#f3891e\" text=\"#000000\">";
 pageContent += "<FONT size=\"6\" FACE=\"Verdana\"><b>Toggl Control Box</b></FONT>";
 pageContent += "<FONT size=\"4\" FACE=\"Verdana\">\n<BR><b>Setup</b><BR><BR></font>";
 pageContent += "<form action=\"\" method=\"GET\">\n";
@@ -99,8 +99,6 @@ server.send ( 200, "text/html", pageContent );
 
 
 void handleNotFound() {
-
-  // if(SD_initialized && loadFromSdCard(server.uri())) return;
   String message = "Not Found:\n\n";
 
   message += "URI: ";

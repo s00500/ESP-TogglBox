@@ -1,25 +1,11 @@
-/*
-   note on i2c for display: address is 0x3c, SDA is gpio 4 (D2), SCL is gpio 5 (D1)
-
-  For the 12 position switch:
-  solder a 10k resistor between each leg, except between position 0 and 12. connect position 0 to GND and position 12 to 3V3 and the output (center) to analog input (A0) of the NodeMCU
-  for input value stability, add a 1uF cap between A0 and GND
-
-  The buttons act as pulldowns to GND. Set on of the connections of the buttons to GND, the other one to: green button: D6, red button D7
-
- * */
-
 #include <ESP8266WiFi.h>
 #include <WiFiClientSecure.h>  // Use WiFiClientSecure class to create TLS connection
-#include <Wire.h>
 #include <ESP8266WebServer.h>
 #include <EEPROM.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
-#include <Fonts/FreeSans9pt7b.h>  //linienabstand: 16
-#include <Fonts/FreeSans12pt7b.h>
-#include <Fonts/FreeSans18pt7b.h>
-//#include <Fonts/FreeSans24pt7b.h>
+#include <Adafruit_NeoPixel.h>
+
+#define NEOPIN D7
+
 #include "global.h"
 #include "eeprom.h"
 #include "webpage.h"
@@ -27,7 +13,16 @@
 #include "base64.h"
 #include "toggle_API.h"
 
+Adafruit_NeoPixel pixel = Adafruit_NeoPixel(1, NEOPIN, NEO_GRB + NEO_KHZ800);
+long oldTime = 0;
+
 void setup() {
+  pixel.begin(); // This initializes the NeoPixel library.
+
+
+  pixel.setPixelColor(0, pixel.Color(0, 255, 255));
+  pixel.show();
+
   Serial.begin(115200);
   Serial.println();
   WiFi.softAPdisconnect(true);
@@ -36,19 +31,6 @@ void setup() {
   switch_changed = false;
 
   WiFi.mode(WIFI_STA);
-
-  pinMode(12, INPUT_PULLUP);  // start (NodeMCU D6)
-  pinMode(13, INPUT_PULLUP);  // stop (NodeMCU D7)
-
-  attachInterrupt(12, startButtonISR, FALLING);
-  attachInterrupt(13, stopButtonISR, FALLING);
-  startpressed = false;  // clear button states
-  stoppressed = false;
-
-  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
-  Wire.setClock(400000);  // use fast speed
-  display.clearDisplay();
-  display.display();  //
 
   EEPROM.begin(128);
   if (!ReadConfig()) {
@@ -59,19 +41,8 @@ void setup() {
   server.onNotFound(handleNotFound);  // handle page not found (send 404 response)
   server.begin();                     // start webserver
 
-  // display configuration
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
-  display.setTextWrap(false);
-
-  display.setCursor(0, 0);
-  display.println(F("Connecting to network: "));
-  display.println(config.ssid);
-  display.display();
-
   // if string read from eeprom is used directly, it won't connect after AP mode. A bug?
 
-  // WiFi.begin(config.ssid.c_str(), config.password.c_str());
   String ssidstr = config.ssid;
   String pwstr = config.password;
   WiFi.begin(ssidstr.c_str(), pwstr.c_str());
@@ -90,10 +61,10 @@ void setup() {
     {
       WiFi.mode(WIFI_AP);
       WiFi.softAP("ESP_togglr", "12345678");  // start accesspoint with config page
-      display.println(F("Starting Accesspoint:"));
-      display.println(F("SSID: ESP_togglr"));
-      display.println(F("PW: 12345678"));
-      display.display();
+      Serial.println(F("Starting Accesspoint:"));
+      Serial.println(F("SSID: ESP_togglr"));
+      Serial.println(F("PW: 12345678"));
+
       while (true) {
         server.handleClient();
         yield();
@@ -105,11 +76,10 @@ void setup() {
   Serial.print(F("IP address: "));
   Serial.println(WiFi.localIP());
 
-  display.println(F("WiFi connected"));
-  display.print(F("IP: "));
-  display.println(WiFi.localIP());
-  display.print(F("Toggl Server"));
-  display.display();
+  Serial.println(F("WiFi connected"));
+  Serial.print(F("IP: "));
+  Serial.println(WiFi.localIP());
+  Serial.print(F("Toggl Server"));
 
   // create authentication string for toggl account from API key
   authentication = config.APIkey + ":api_token";
@@ -120,31 +90,23 @@ void setup() {
   WiFiClientSecure client;
   if (toggl_connect(&client)) {
     Serial.println(F("Connected"));
-    display.print(F("."));
-    display.display();
+    Serial.print(F("."));
   }
 
   if (readWorkspaces(&client)) {
-    display.print(F("."));
-    display.display();
     Serial.println(F("Server Response OK"));
   }
 
   if (readProjects(&client)) {
-    display.print(F("."));
-    display.display();
     Serial.println(F("Server Response OK"));
   }
 
   // check if we got at least one workspace and one project:
   if (projectID[0].length() > 1 && workspaceID[0].length() > 1) {
-    display.println(F("OK"));
-    display.display();
+    Serial.println(F("OK"));
   } else {
-    display.println(F(" FAIL!"));
-    display.display();
-    display.println(F("No Projects"));
-    display.display();
+    Serial.println(F(" FAIL!"));
+    Serial.println(F("No Projects"));
     delay(5000);
     ESP.restart();  // reboot
   }
@@ -165,11 +127,18 @@ void setup() {
   }
 }
 
-// testproject: at index 7
-
 void loop() {
+
+  if (isrunning) {
+    pixel.setPixelColor(0, pixel.Color(255, 0, 0));
+    pixel.show();
+  } else {
+    pixel.setPixelColor(0, pixel.Color(0, 0, 255));
+    pixel.show();
+  }
   bool switchproject = false;  // switch project
-  if (WiFi.status() == WL_CONNECTED) {
+  /*
+    if (WiFi.status() == WL_CONNECTED) {
 
     if (projectID[switchposition] == "") //empty project position
     {
@@ -179,13 +148,8 @@ void loop() {
     if (startpressed) {
       if (!isrunning) {
         WiFiClientSecure client;
-        // display.setFont(&FreeSans9pt7b);
-        display.setFont(&FreeSans18pt7b);
 
-        display.clearDisplay();
-        display.setCursor(0, 45);
-        display.println(F("START!"));
-        display.display();
+        Serial.println(F("START!"));
         toggl_connect(&client);
 
         if (client.connected())  // todo: need to make this more safe, maybe try to connect a few times... or record time locally and update remote later?
@@ -230,7 +194,7 @@ void loop() {
               Serial.println(runningTimerID);
               startpressed = false;
               isrunning = true;
-              
+
             }
           }
 
@@ -258,11 +222,11 @@ void loop() {
           startpressed = false;  // clear any pending start button detections
         }
         WiFiClientSecure client;
-        display.setFont(&FreeSans18pt7b);
-        display.clearDisplay();
-        display.setCursor(11, 45);
-        display.println(F("STOP!"));
-        display.display();
+        //display.setFont(&FreeSans18pt7b);
+        //display.clearDisplay();
+        //display.setCursor(11, 45);
+        //display.println(F("STOP!"));
+        //display.display();
 
         toggl_connect(&client);
 
@@ -303,41 +267,27 @@ void loop() {
       }
     }
     updateState();
-  } else {
-    display.setFont(0);
-    display.clearDisplay();
-    display.setCursor(20, 45);
-    display.println(F("WIFI DISCONNECTED"));
-    display.display();
+    } else {
+    Serial.println(F("WIFI DISCONNECTED"));
+    }
+  */
+  if (WiFi.status() == WL_CONNECTED) {
+    if ((millis() - oldTime) > 5000) {
+      WiFiClientSecure client;
+      toggl_connect(&client);
+      if (client.connected()) {
+        if (readCurrentTimerID(&client))  // if timer is currently running
+        {
+          Serial.println(F("Timer is running!"));
+          isrunning = true;
+        } else {
+          Serial.println(F("Timer is NOT running!"));
+          isrunning = false;
+        }
+      }
+      oldTime = millis();
+    }
   }
-
-  // todo: check like every 5 seconds if timer is running or if it was stopped through web interface
 
   delay(50);
 }
-
-/*
-
-  288347 Christoph Romer's workspace
-  1277454 mine
-  1448829 testworkspace
-
-  User ID = 2046360
-
-
-  0:  13245672  0-Gemeinkosten
-  1:  14947268  1250-AF-OIS
-  2:  14862753  1165-OptoTester
-  3:  13246358  1206-Fiz Roy
-  4:  13914058  0108-Knowles
-  5:  13245666  1208-Electronics Engineering
-  6:  13328722  1235-Deneb
-  7:  15690909  testproject
-  8:
-  9:
-  10:
-  11:
-
-
-
-*/

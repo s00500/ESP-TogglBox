@@ -13,10 +13,10 @@
 
 void printDigits(byte digits){
  // utility function for digital clock display: prints colon and leading 0
- display.print(":");
- if(digits < 10)
-   display.print('0');
- display.print(digits,DEC);  
+ //display.print(":");
+ //if(digits < 10)
+   //display.print('0');
+ //display.print(digits,DEC);  
 }
 
 void displaytime(long val){  
@@ -28,8 +28,8 @@ int seconds = numberOfSeconds(val);
  // digital clock display of current time
 // display.print(days,DEC);
 if(hours < 10)
-  display.print(' ');  
-  display.print(hours);  
+  //display.print(' ');  
+  //display.print(hours);  
  printDigits(minutes);
  printDigits(seconds);
 

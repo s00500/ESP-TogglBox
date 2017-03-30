@@ -249,8 +249,6 @@ bool readProjects(WiFiClientSecure* client) //get toggl workspaces (returns fals
     }
     if (responseok) {
       Serial.println(F("Server Response OK"));
-      display.print(F("."));
-      display.display();
     }
 
   }
