@@ -16,6 +16,8 @@
 Adafruit_NeoPixel pixel = Adafruit_NeoPixel(1, NEOPIN, NEO_GRB + NEO_KHZ800);
 long oldTime = 0;
 
+bool breathing = true;
+
 void setup() {
   pixel.begin(); // This initializes the NeoPixel library.
 
@@ -126,14 +128,23 @@ void setup() {
     isrunning = true;
   }
 }
+void breath() {
+  float val = ((exp(sin(millis() / 2000.0 * PI)) - 0.36787944) * 108.0) + 1;
+  pixel.setPixelColor(0, pixel.Color(val, 0, 0));
+  pixel.show();
+}
 
 void loop() {
-
+  //if (breathing) breath();
+  
   if (isrunning) {
+    breathing = true;
     pixel.setPixelColor(0, pixel.Color(255, 0, 0));
     pixel.show();
   } else {
-    pixel.setPixelColor(0, pixel.Color(0, 0, 255));
+    breathing = false;
+    pixel.setPixelColor(0, pixel.Color(0, 0, 0));
+    //pixel.setPixelColor(0, pixel.Color(0, 0, 255));
     pixel.show();
   }
   bool switchproject = false;  // switch project
